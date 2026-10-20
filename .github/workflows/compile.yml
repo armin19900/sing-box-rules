@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '**.json'
+      - '.github/workflows/compile.yml'
   workflow_dispatch:
 
 permissions:
@@ -12,30 +13,76 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Download sing-box Tool
+        env:
+          SING_BOX_VERSION: "1.14.0"
         run: |
-          curl -Lo sb.tar.gz https://github.com
-          tar -xzf sb.tar.gz
-          mv sing-box-*linux-amd64/sing-box ./sing-box
-          chmod +x ./sing-box
+          set -euo pipefail
+
+          URL="https://github.com/SagerNet/sing-box/releases/download/v${SING_BOX_VERSION}/sing-box-${SING_BOX_VERSION}-linux-amd64.tar.gz"
+
+          curl -fL --retry 3 --retry-delay 2 \
+            -o sb.tar.gz "$URL"
+
+          tar -tzf sb.tar.gz
+
+          mkdir -p sing-box-extract
+          tar -xzf sb.tar.gz -C sing-box-extract
+
+          BIN="$(find sing-box-extract -type f -name sing-box -print -quit)"
+
+          if [ -z "$BIN" ]; then
+            echo "Error: sing-box binary not found"
+            exit 1
+          fi
+
+          install -m 755 "$BIN" ./sing-box
+          ./sing-box version
 
       - name: Compile JSON to SRS
         run: |
-          for file in *.json; do
-            if [ -f "$file" ]; then
-              filename="${file%.*}"
-              ./sing-box rule-set compile "$file" -o "${filename}.srs"
-            fi
+          set -euo pipefail
+          shopt -s nullglob
+
+          json_files=( *.json )
+
+          if [ ${#json_files[@]} -eq 0 ]; then
+            echo "No JSON files found."
+            exit 0
+          fi
+
+          for file in "${json_files[@]}"; do
+            filename="${file%.json}"
+            echo "Compiling $file -> ${filename}.srs"
+            ./sing-box rule-set compile "$file" -o "${filename}.srs"
           done
 
       - name: Commit and Push SRS
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]"
-          git add *.srs
-          git diff --staged --quiet || git commit -m "Auto-compiled srs rule-sets"
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          shopt -s nullglob
+          srs_files=( *.srs )
+
+          if [ ${#srs_files[@]} -eq 0 ]; then
+            echo "No SRS files generated."
+            exit 0
+          fi
+
+          git add -- "${srs_files[@]}"
+
+          if git diff --cached --quiet; then
+            echo "No SRS changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Auto-compiled srs rule-sets"
           git push
