@@ -16,29 +16,26 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 'stable'
-
-      - name: Install sing-box
+      - name: Download sing-box Tool
         run: |
-          # 纯正的 Go 官方编译路径，没有任何特殊符号
-          go install ://github.com
+          curl -Lo sb.tar.gz https://github.com
+          tar -xzf sb.tar.gz
+          mv sing-box-*linux-amd64/sing-box ./sing-box
+          chmod +x ./sing-box
 
       - name: Compile JSON to SRS
         run: |
           for file in *.json; do
             if [ -f "$file" ]; then
               filename="${file%.*}"
-              ~/go/bin/sing-box rule-set compile "$file" -o "${filename}.srs"
+              ./sing-box rule-set compile "$file" -o "${filename}.srs"
             fi
           done
 
       - name: Commit and Push SRS
         run: |
           git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.email "github-actions[bot]"
           git add *.srs
           git diff --staged --quiet || git commit -m "Auto-compiled srs rule-sets"
           git push
