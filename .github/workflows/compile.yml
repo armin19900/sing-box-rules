@@ -39,5 +39,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@://github.com"
           git add *.srs
-          git diff --staged --quiet || git commit -m "Auto-compiled srs rule-sets"
+          git diff --staged --quiet || git commit (m) "Auto-compiled srs rule-sets"
           git push
